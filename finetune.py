@@ -20,32 +20,32 @@ import tensorflow as tf
 from alexnet import AlexNet
 from datagenerator import ImageDataGenerator
 from datetime import datetime
-from tensorflow.contrib.data import Iterator
+from tensorflow.data import Iterator
 
 """
 Configuration Part.
 """
 
 # Path to the textfiles for the trainings and validation set
-train_file = '/path/to/train.txt'
-val_file = '/path/to/val.txt'
+train_file = '/home/iair-p05/Projects/Dataset/MNIST/TrainImageList.txt'
+val_file =   '/home/iair-p05/Projects/Dataset/MNIST/ValidImageList.txt'
 
 # Learning params
-learning_rate = 0.01
-num_epochs = 10
+learning_rate = 0.001
+num_epochs = 2
 batch_size = 128
 
 # Network params
 dropout_rate = 0.5
-num_classes = 2
-train_layers = ['fc8', 'fc7', 'fc6']
+num_classes = 10
+train_layers = ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc8', 'fc7', 'fc6']
 
 # How often we want to write the tf.summary data to disk
 display_step = 20
 
 # Path for tf.summary.FileWriter and to store model checkpoints
-filewriter_path = "/tmp/finetune_alexnet/tensorboard"
-checkpoint_path = "/tmp/finetune_alexnet/checkpoints"
+filewriter_path = "./tensorboard"
+checkpoint_path = "./checkpoints"
 
 """
 Main Part of the finetuning Script.
@@ -93,7 +93,7 @@ var_list = [v for v in tf.trainable_variables() if v.name.split('/')[0] in train
 
 # Op for calculating the loss
 with tf.name_scope("cross_ent"):
-    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=score,
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=score,
                                                                   labels=y))
 
 # Train op

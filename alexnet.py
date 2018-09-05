@@ -59,6 +59,7 @@ class AlexNet(object):
         """Create the network graph."""
         # 1st Layer: Conv (w ReLu) -> Lrn -> Pool
         conv1 = conv(self.X, 11, 11, 96, 4, 4, padding='VALID', name='conv1')
+        #conv1 = tf.Print(conv1, [conv1], message="CONV1: ", summarize=10)
         norm1 = lrn(conv1, 2, 2e-05, 0.75, name='norm1')
         pool1 = max_pool(norm1, 3, 3, 2, 2, padding='VALID', name='pool1')
         
@@ -88,6 +89,7 @@ class AlexNet(object):
 
         # 8th Layer: FC and return unscaled activations
         self.fc8 = fc(dropout7, 4096, self.NUM_CLASSES, relu=False, name='fc8')
+        #self.fc8 = tf.Print(fc8, [fc8[0,:]], message="FC8", summarize=10)
 
     def load_initial_weights(self, session):
         """Load weights from file into network.
@@ -98,7 +100,8 @@ class AlexNet(object):
         'biases') we need a special load function
         """
         # Load the weights into memory
-        weights_dict = np.load(self.WEIGHTS_PATH, encoding='bytes').item()
+        #weights_dict = np.load(self.WEIGHTS_PATH, encoding='bytes').item()
+        weights_dict = {}
 
         # Loop over all layer names stored in the weights dict
         for op_name in weights_dict:
