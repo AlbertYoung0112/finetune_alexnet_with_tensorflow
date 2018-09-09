@@ -32,7 +32,7 @@ val_file =   '/home/iair-p05/Projects/Dataset/MNIST/ValidImageList.txt'
 
 # Learning params
 learning_rate = 0.001
-num_epochs = 2
+num_epochs = 10
 batch_size = 128
 
 # Network params
@@ -41,11 +41,11 @@ num_classes = 10
 train_layers = ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc8', 'fc7', 'fc6']
 
 # How often we want to write the tf.summary data to disk
-display_step = 20
+display_step = 10
 
 # Path for tf.summary.FileWriter and to store model checkpoints
-filewriter_path = "./tensorboard"
-checkpoint_path = "./checkpoints"
+filewriter_path = "./tensorboard/Train/" + str(datetime.now())
+checkpoint_path = "./checkpoints/" + str(datetime.now())
 
 """
 Main Part of the finetuning Script.
@@ -121,10 +121,12 @@ tf.summary.scalar('cross_entropy', loss)
 # Evaluation op: Accuracy of the model
 with tf.name_scope("accuracy"):
     correct_pred = tf.equal(tf.argmax(score, 1), tf.argmax(y, 1))
+    scaledScore = tf.div(score, tf.reshape(tf.reduce_max(score, 1), (batch_size, 1)))
     accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 # Add the accuracy to the summary
 tf.summary.scalar('accuracy', accuracy)
+tf.summary.histogram('ErrorConfidence', scaledScore)
 
 # Merge all summaries together
 merged_summary = tf.summary.merge_all()
