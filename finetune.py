@@ -29,10 +29,12 @@ Configuration Part.
 # Path to the textfiles for the trainings and validation set
 train_file = '/home/iair-p05/Projects/Dataset/MNIST/TrainImageList.txt'
 val_file =   '/home/iair-p05/Projects/Dataset/MNIST/ValidImageList.txt'
+weight_file = './checkpoints/2018-10-16 21:25:10.327862/model_epoch13.ckpt'
+#weight_file = None
 
 # Learning params
 learning_rate = 0.001
-num_epochs = 10
+num_epochs = 1000
 batch_size = 128
 
 # Network params
@@ -83,7 +85,7 @@ y = tf.placeholder(tf.float32, [batch_size, num_classes])
 keep_prob = tf.placeholder(tf.float32)
 
 # Initialize model
-model = AlexNet(x, keep_prob, num_classes, train_layers)
+model = AlexNet(x, keep_prob, num_classes, train_layers, training=True)
 
 # Link variable to model output
 score = model.fc8
@@ -152,6 +154,8 @@ with tf.Session() as sess:
 
     # Load the pretrained weights into the non-trainable layer
     model.load_initial_weights(sess)
+    if weight_file is not None:
+        saver.restore(sess, weight_file)
 
     print("{} Start training...".format(datetime.now()))
     print("{} Open Tensorboard at --logdir {}".format(datetime.now(),
@@ -180,9 +184,11 @@ with tf.Session() as sess:
                 s = sess.run(merged_summary, feed_dict={x: img_batch,
                                                         y: label_batch,
                                                         keep_prob: 1.})
+                print("\r" + str(int((step + 1) * 100 / train_batches_per_epoch)) + "%", end='')
 
                 writer.add_summary(s, epoch*train_batches_per_epoch + step)
 
+        print('')
         # Validate the model on the entire validation set
         print("{} Start validation".format(datetime.now()))
         sess.run(validation_init_op)

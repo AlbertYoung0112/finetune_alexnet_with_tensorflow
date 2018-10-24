@@ -23,13 +23,18 @@ folder as this file:
 
 import tensorflow as tf
 import numpy as np
+from tensorflow.python.training import moving_averages
+from tensorflow.python.ops import control_flow_ops
+from BinaryOp import *
+
+SET_BINARY = True
 
 
 class AlexNet(object):
     """Implementation of the AlexNet."""
 
     def __init__(self, x, keep_prob, num_classes, skip_layer,
-                 weights_path='DEFAULT'):
+                 weights_path='DEFAULT', training=False):
         """Create the graph of the AlexNet model.
 
         Args:
@@ -46,6 +51,8 @@ class AlexNet(object):
         self.NUM_CLASSES = num_classes
         self.KEEP_PROB = keep_prob
         self.SKIP_LAYER = skip_layer
+        self.training = tf.convert_to_tensor(training, dtype='bool',
+                                             name='is_training')
 
         if weights_path == 'DEFAULT':
             self.WEIGHTS_PATH = 'bvlc_alexnet.npy'
@@ -59,27 +66,46 @@ class AlexNet(object):
         """Create the network graph."""
         # 1st Layer: Conv (w ReLu) -> Lrn -> Pool
         conv1 = conv(self.X, 11, 11, 96, 4, 4, padding='VALID', name='conv1')
-        #conv1 = tf.Print(conv1, [conv1], message="CONV1: ", summarize=10)
-        norm1 = lrn(conv1, 2, 2e-05, 0.75, name='norm1')
+        #norm1 = lrn(conv1, 2, 2e-05, 0.75, name='norm1')
+        norm1 = bn(conv1, is_training=self.training, name='bn1')
         pool1 = max_pool(norm1, 3, 3, 2, 2, padding='VALID', name='pool1')
-        
+        bin1 = pool1
+        if(SET_BINARY):
+            bin1 = Binarize(pool1)
+
         # 2nd Layer: Conv (w ReLu)  -> Lrn -> Pool with 2 groups
-        conv2 = conv(pool1, 5, 5, 256, 1, 1, groups=2, name='conv2')
-        norm2 = lrn(conv2, 2, 2e-05, 0.75, name='norm2')
+        conv2 = conv(bin1, 5, 5, 256, 1, 1, groups=2, name='conv2')
+        #norm2 = lrn(conv2, 2, 2e-05, 0.75, name='norm2')
+        norm2 = bn(conv2, is_training=self.training, name='bn2')
         pool2 = max_pool(norm2, 3, 3, 2, 2, padding='VALID', name='pool2')
-        
+        bin2 = pool2
+        if(SET_BINARY):
+            bin2 = Binarize(pool2)
+
         # 3rd Layer: Conv (w ReLu)
-        conv3 = conv(pool2, 3, 3, 384, 1, 1, name='conv3')
+        conv3 = conv(bin2, 3, 3, 384, 1, 1, name='conv3')
+        norm3 = bn(conv3, is_training=self.training, name='bn3')
+        bin3 = norm3
+        if(SET_BINARY):
+            bin3 = Binarize(norm3)
 
         # 4th Layer: Conv (w ReLu) splitted into two groups
-        conv4 = conv(conv3, 3, 3, 384, 1, 1, groups=2, name='conv4')
+        conv4 = conv(bin3, 3, 3, 384, 1, 1, groups=2, name='conv4')
+        norm4 = bn(conv4, is_training=self.training, name='bn4')
+        bin4 = norm4
+        if(SET_BINARY):
+            bin4 = Binarize(norm4)
 
         # 5th Layer: Conv (w ReLu) -> Pool splitted into two groups
-        conv5 = conv(conv4, 3, 3, 256, 1, 1, groups=2, name='conv5')
+        conv5 = conv(bin4, 3, 3, 256, 1, 1, groups=2, name='conv5')
         pool5 = max_pool(conv5, 3, 3, 2, 2, padding='VALID', name='pool5')
+        norm5 = bn(pool5, is_training=self.training, name='bn5')
+        bin5 = norm5
+        if(SET_BINARY):
+            bin5 = Binarize(norm5)
 
         # 6th Layer: Flatten -> FC (w ReLu) -> Dropout
-        flattened = tf.reshape(pool5, [-1, 6*6*256])
+        flattened = tf.reshape(bin5, [-1, 6*6*256])
         fc6 = fc(flattened, 6*6*256, 4096, name='fc6')
         dropout6 = dropout(fc6, self.KEEP_PROB)
 
@@ -147,6 +173,9 @@ def conv(x, filter_height, filter_width, num_filters, stride_y, stride_x, name,
                                                     num_filters])
         biases = tf.get_variable('biases', shape=[num_filters])
 
+    if(SET_BINARY):
+        weights = Binarize(weights)
+
     if groups == 1:
         conv = convolve(x, weights)
 
@@ -182,12 +211,57 @@ def fc(x, num_in, num_out, name, relu=True):
         # Matrix multiply weights and inputs and add bias
         act = tf.nn.xw_plus_b(x, weights, biases, name=scope.name)
 
+    if(SET_BINARY):
+        weights = Binarize(weights)
+
     if relu:
         # Apply ReLu non linearity
         relu = tf.nn.relu(act)
         return relu
     else:
         return act
+
+
+def bn(x, name, use_bias=False, is_training=False):
+    MOVING_AVERAGE_DECAY = 0.9997
+    BN_DECAY = MOVING_AVERAGE_DECAY
+    BN_EPSILON = 0.001
+    x_shape = x.get_shape()
+    params_shape = x_shape[-1:]
+
+    if use_bias:
+        bias = tf.get_variable('bias', shape=params_shape,
+                                  initializer=tf.zeros_initializer)
+        return x + bias
+
+    axis = list(range(len(x_shape) - 1))
+
+    with tf.variable_scope(name) as scope:
+        beta = tf.get_variable('beta', params_shape, initializer=tf.zeros_initializer)
+        gamma = tf.get_variable('gamma', params_shape, initializer=tf.ones_initializer)
+        moving_mean = tf.get_variable('moving_mean', params_shape,
+                                      initializer=tf.zeros_initializer, trainable=False)
+        moving_variance = tf.get_variable('moving_variance', params_shape,
+                                      initializer=tf.ones_initializer, trainable=False)
+
+    # These ops will only be preformed when training.
+    mean, variance = tf.nn.moments(x, axis)
+    update_moving_mean = moving_averages.assign_moving_average(moving_mean,
+                                                               mean, BN_DECAY)
+    update_moving_variance = moving_averages.assign_moving_average(
+        moving_variance, variance, BN_DECAY)
+    tf.add_to_collection('update_op', update_moving_mean)
+    tf.add_to_collection('update_op', update_moving_variance)
+    #moving_mean = tf.Print(moving_mean, [moving_mean], message='MovMean')
+
+    mean, variance = control_flow_ops.cond(
+        is_training, lambda: (mean, variance),
+        lambda: (moving_mean, moving_variance))
+
+    x = tf.nn.batch_normalization(x, mean, variance, beta, gamma, BN_EPSILON)
+    # x.set_shape(inputs.get_shape()) ??
+
+    return x
 
 
 def max_pool(x, filter_height, filter_width, stride_y, stride_x, name,
